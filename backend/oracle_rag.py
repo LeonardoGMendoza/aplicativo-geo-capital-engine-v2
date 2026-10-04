@@ -31,6 +31,43 @@ def _chamar_oracle_rag_cache(_config, compartment_id, prompt_sistema):
 import chromadb
 from chromadb.utils import embedding_functions
 
+DOCUMENTOS_DEMO = [
+    "Exemplo de demonstração (cenário de enchente): iniciar a evacuação com antecedência nas áreas de vale e garantir água potável e energia no abrigo central desde as primeiras horas.",
+    "Exemplo de demonstração (cenário de rompimento de barragem): sirenes terrestres podem falhar; usar também alerta por SMS, principalmente em zona rural.",
+    "Exemplo de demonstração (cenário de incêndio): abrigos e tendas médicas precisam de proteção contra fumaça, como purificadores de ar."
+]
+
+METADADOS_DEMO = [{"evento": "enchente_rs"}, {"evento": "rompimento_barragem"}, {"evento": "incendio_pantanal"}]
+
+def obter_colecao():
+    if "oci" in st.secrets and "COHERE_API_KEY" in st.secrets["oci"]:
+        COHERE_API_KEY = st.secrets["oci"]["COHERE_API_KEY"]
+    else:
+        raise KeyError("COHERE_API_KEY não encontrada")
+    
+    chroma_client = chromadb.PersistentClient(path="./banco_historico")
+    cohere_ef = embedding_functions.CohereEmbeddingFunction(
+        api_key=COHERE_API_KEY,
+        model_name="embed-multilingual-v3.0"
+    )
+    colecao = chroma_client.get_or_create_collection(
+        name="exemplos_demonstracao",
+        embedding_function=cohere_ef,
+        metadata={"hnsw:space": "cosine"}
+    )
+    if colecao.count() == 0:
+        ids = [f"doc{i}" for i in range(len(DOCUMENTOS_DEMO))]
+        colecao.add(documents=DOCUMENTOS_DEMO, metadatas=METADADOS_DEMO, ids=ids)
+    return colecao
+
+@st.cache_data(ttl=600)
+def _consultar_historico_cache(evento_nome):
+    colecao = obter_colecao()
+    resultados = colecao.query(query_texts=[evento_nome], n_results=1)
+    if resultados['documents'] and len(resultados['documents'][0]) > 0:
+        return resultados['documents'][0][0]
+    return "Sem dados históricos."
+
 def gerar_recomendacao_rag(evento_nome, ativo_nome, distancia, visao):
     
     # ==========================================
@@ -38,24 +75,7 @@ def gerar_recomendacao_rag(evento_nome, ativo_nome, distancia, visao):
     # ==========================================
     contexto_historico = "Sem dados históricos."
     try:
-        if "oci" in st.secrets and "COHERE_API_KEY" in st.secrets["oci"]:
-            COHERE_API_KEY = st.secrets["oci"]["COHERE_API_KEY"]
-            chroma_client = chromadb.PersistentClient(path="./banco_historico")
-            cohere_ef = embedding_functions.CohereEmbeddingFunction(
-                api_key=COHERE_API_KEY,
-                model_name="embed-multilingual-v3.0"
-            )
-            # Tenta acessar a coleção que já foi criada na ingestão
-            colecao = chroma_client.get_collection(
-                name="relatorios_defesa_civil",
-                embedding_function=cohere_ef
-            )
-            resultados = colecao.query(
-                query_texts=[evento_nome],
-                n_results=1
-            )
-            if resultados['documents'] and len(resultados['documents'][0]) > 0:
-                contexto_historico = resultados['documents'][0][0]
+        contexto_historico = _consultar_historico_cache(evento_nome)
     except Exception as e:
         print(f"[RAG] Erro ao buscar no banco vetorial: {e}")
 
@@ -71,11 +91,11 @@ def gerar_recomendacao_rag(evento_nome, ativo_nome, distancia, visao):
     - Distância: {distancia:.0f} KM
     - Perfil Solicitante: {visao}
 
-    HISTÓRICO DA DEFESA CIVIL (RECUPERADO VIA BANCO VETORIAL):
+    EXEMPLO HISTÓRICO DE DEMONSTRAÇÃO (RECUPERADO VIA BANCO VETORIAL):
     "{contexto_historico}"
 
     INSTRUÇÃO:
-    Você deve formular uma recomendação estratégica. Utilize o histórico da Defesa Civil para não repetir erros do passado.
+    Você deve formular uma recomendação estratégica. Utilize o exemplo histórico de demonstração para orientar a recomendação.
     Se o perfil for "Corporativo (B2B)", foque na mitigação de risco patrimonial.
     Se o perfil for "Impacto Social / ESG", foque na evacuação e saúde pública.
     Limite a 2 ou 3 frases curtas. Inicie com "**Decisão RAG (IA):**".

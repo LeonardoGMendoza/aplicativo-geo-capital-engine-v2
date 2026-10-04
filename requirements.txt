@@ -4,5 +4,5 @@ requests
 yfinance
 oci
 
-chromadb
-cohere
+chromadb==1.5.9
+cohere==7.2.0

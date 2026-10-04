@@ -4,3 +4,5 @@ __pycache__/
 .oci/
 
 .streamlit/secrets.toml
+banco_historico/
+*.bak*

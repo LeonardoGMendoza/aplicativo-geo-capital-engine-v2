@@ -133,6 +133,67 @@ def gerar_recomendacao_ia_local(evento_nome, abrigo_nome, distancia_km):
 eventos_nasa = buscar_nasa()   # compartilhado pelas três visões
 df_cotacoes  = buscar_cotacoes()
 
+@st.cache_data(ttl=900)
+def buscar_chuva_cidades(pontos):
+    """Previsao de chuva (3 dias) via Open-Meteo."""
+    resultado = []
+    for cidade, lat, lon in pontos:
+        try:
+            r = requests.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={"latitude": lat, "longitude": lon, "daily": "precipitation_sum",
+                        "forecast_days": 3, "timezone": "America/Sao_Paulo"},
+                timeout=8,
+            )
+            d = r.json()["daily"]
+            resultado.append({"cidade": cidade, "mm": [float(x or 0) for x in d["precipitation_sum"]]})
+        except Exception:
+            continue
+    return resultado
+
+def nivel_chuva(mm):
+    if mm >= 100:
+        return "🔴", "ALTO (100+ mm/dia)"
+    if mm >= 50:
+        return "🟠", "ATENÇÃO (50+ mm/dia)"
+    if mm >= 20:
+        return "🟡", "MODERADO (20+ mm/dia)"
+    return "🟢", "BAIXO"
+
+def mostrar_alerta_chuva():
+    st.markdown("### 🌧️ Previsão de Chuva — Cidades dos Abrigos (próximos 3 dias)")
+    cidades = {}
+    for a in ABRIGOS:
+        cidades.setdefault(a["cidade"], (a["lat"], a["lon"]))
+    pontos = tuple((c, la, lo) for c, (la, lo) in cidades.items())
+    dados = buscar_chuva_cidades(pontos)
+    if not dados:
+        st.caption("Previsão de chuva indisponível no momento.")
+        return
+    linhas = []
+    for d in dados:
+        pico = max(d["mm"])
+        emoji, rotulo = nivel_chuva(pico)
+        linhas.append({
+            "Cidade": d["cidade"],
+            "Nível": f"{emoji} {rotulo}",
+            "Pico (mm/dia)": round(pico, 1),
+            "Próximos 3 dias (mm)": " / ".join(f"{x:.0f}" for x in d["mm"]),
+        })
+    linhas.sort(key=lambda x: -x["Pico (mm/dia)"])
+    st.dataframe(pd.DataFrame(linhas), width='stretch')
+    pior = linhas[0]
+    if pior["Pico (mm/dia)"] >= 50:
+        st.warning(f"⚠️ Maior risco: **{pior['Cidade']}** — pico de {pior['Pico (mm/dia)']:.0f} mm em um dia.")
+        texto = gerar_recomendacao_rag(
+            f"Chuva intensa prevista ({pior['Pico (mm/dia)']:.0f} mm em 24 h)",
+            f"Abrigos de {pior['Cidade']}", 0, "Impacto Social / ESG (Comunidade)")
+        st.info(texto)
+    else:
+        st.success("✅ Nenhuma cidade dos abrigos com chuva prevista de 50 mm/dia ou mais nos próximos 3 dias.")
+    st.caption("Fonte: Open-Meteo. Critério do MVP (inspirado no Inmet).")
+
+
 # ============================================================
 # SIDEBAR: MENU DE NAVEGAÇÃO
 # ============================================================
@@ -278,6 +339,9 @@ elif visao == "Abrigos e Preparação":
     with aba2:
         st.subheader("🚨 Central de Alertas — NASA EONET ao Vivo")
         st.markdown("Cruzamento de desastres naturais em tempo real com os abrigos cadastrados.")
+        
+        mostrar_alerta_chuva()
+        st.markdown("---")
 
         if not eventos_nasa:
             st.warning("⚠️ Não foi possível conectar à NASA no momento. Verifique sua conexão com a internet.")
@@ -410,56 +474,24 @@ elif visao == "Abrigos e Preparação":
 # VISÃO 4: RAG VETORIAL (Histórico)
 # ============================================================
 elif visao == "RAG Vetorial (Histórico)":
-    import chromadb
-    from chromadb.utils import embedding_functions
+    from backend.oracle_rag import obter_colecao, DOCUMENTOS_DEMO
 
     st.title("📚 RAG Vetorial: Histórico de Desastres")
-    st.markdown("Busca semântica avançada nos relatórios passados da Defesa Civil.")
+    st.markdown("Base de demonstração: 3 exemplos escritos pela equipe para provar o fluxo RAG. Não são relatórios oficiais.")
     st.markdown("---")
 
-    # Puxa a chave do secrets do Streamlit
-    try:
-        COHERE_API_KEY = st.secrets["oci"]["COHERE_API_KEY"]
-    except KeyError:
-        st.error("Chave COHERE_API_KEY não encontrada no secrets.toml!")
-        st.stop()
-
     st.write("🤖 Iniciando Banco de Dados Vetorial (ChromaDB)...")
-
-    # Inicia o ChromaDB local
-    chroma_client = chromadb.PersistentClient(path="./banco_historico")
-
-    # Configura o modelo de Embeddings da Cohere
-    cohere_ef = embedding_functions.CohereEmbeddingFunction(
-        api_key=COHERE_API_KEY,
-        model_name="embed-multilingual-v3.0"
-    )
-
-    # Cria a coleção
-    colecao = chroma_client.get_or_create_collection(
-        name="relatorios_defesa_civil",
-        embedding_function=cohere_ef
-    )
-
-    st.success("✅ Banco Vetorial conectado com sucesso!")
+    try:
+        colecao = obter_colecao()
+        st.success("✅ Banco Vetorial conectado com sucesso (Métrica: Cosseno)!")
+    except Exception as e:
+        st.error(f"Erro ao obter coleção: {e}")
+        st.stop()
 
     # Fase de INGESTÃO
     with st.expander("📥 Ver Documentos Históricos (Arquivos Base)"):
-        documentos_historicos = [
-            "Relatório 2024 (Enchentes no RS): A evacuação deve começar 48h antes nas áreas de vale. Aprendizado: Faltou água potável e energia no abrigo central nas primeiras 12h.",
-            "Relatório 2019 (Brumadinho): O rompimento de barragem revelou que sirenes terrestres podem falhar se a lama atingir a fiação. O uso de SMS foi mais eficaz na zona rural.",
-            "Relatório 2023 (Incêndios no Pantanal): Os abrigos improvisados sofreram com a fumaça tóxica. É obrigatório instalar purificadores de ar nas tendas médicas."
-        ]
-        metadados = [{"evento": "enchente_rs"}, {"evento": "rompimento_barragem"}, {"evento": "incendio_pantanal"}]
-        ids = ["doc1", "doc2", "doc3"]
-        
-        if colecao.count() == 0:
-            colecao.add(documents=documentos_historicos, metadatas=metadados, ids=ids)
-            st.write("*(Documentos inseridos no banco vetorial agora!)*")
-        else:
-            st.write(f"*(O banco já contém {colecao.count()} relatórios indexados).*")
-            
-        for doc in documentos_historicos:
+        st.write(f"*(O banco contém {colecao.count()} documentos de exemplo indexados).*")
+        for doc in DOCUMENTOS_DEMO:
             st.info(doc)
 
     # Fase de INFERÊNCIA (RAG)
@@ -470,9 +502,14 @@ elif visao == "RAG Vetorial (Histórico)":
         with st.spinner("Transformando texto em vetores e buscando no banco matemático..."):
             resultados = colecao.query(
                 query_texts=[novo_desastre],
-                n_results=1
+                n_results=1,
+                include=["documents", "distances"]
             )
             
-            st.warning("🚨 CONTEXTO RECUPERADO (Baseado na similaridade semântica)")
-            st.write(resultados['documents'][0][0])
+            if resultados['documents'] and len(resultados['documents'][0]) > 0:
+                distancia = resultados['distances'][0][0]
+                st.warning(f"🚨 CONTEXTO RECUPERADO (Métrica: Cosseno, Distância matemática: {distancia:.4f})")
+                st.write(resultados['documents'][0][0])
+            else:
+                st.error("Sem dados recuperados.")
 
