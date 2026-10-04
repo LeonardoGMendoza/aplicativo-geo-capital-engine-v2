@@ -7,7 +7,7 @@ st.title("📚 RAG Vetorial: Histórico de Desastres")
 
 # Puxa a chave do secrets do Streamlit
 try:
-    COHERE_API_KEY = st.secrets["COHERE_API_KEY"]
+    COHERE_API_KEY = st.secrets["oci"]["COHERE_API_KEY"]
 except KeyError:
     st.error("Chave COHERE_API_KEY não encontrada no secrets.toml!")
     st.stop()
