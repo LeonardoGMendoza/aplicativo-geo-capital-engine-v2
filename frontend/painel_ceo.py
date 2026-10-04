@@ -28,9 +28,9 @@ st.set_page_config(
 # DADOS: ATIVOS CORPORATIVOS (painel_ceo.py original)
 # ============================================================
 mapa_dados = [
+    {"lat": -23.8, "lon": -42.2,  "ativo": "Plataforma Petrobras (Pre-Sal, Brasil)",    "comunidade_vizinha": "Pescadores (Litoral de SP/RJ)",             "risco_secundario": "Vazamento no Mar e Destruicao de Manguezal"},
     {"lat": 28.5,  "lon": -90.0,  "ativo": "Plataforma ExxonMobil (Golfo do Mexico)",  "comunidade_vizinha": "Vila de Pescadores de Nova Orleans",      "risco_secundario": "Vazamento Toxico (Oleoduto)"},
     {"lat": 29.0,  "lon": -88.0,  "ativo": "Plataforma Chevron (Golfo do Mexico)",      "comunidade_vizinha": "Comunidades Costeiras (Louisiana)",         "risco_secundario": "Contaminacao Hidrica (Oleoduto)"},
-    {"lat": -23.8, "lon": -42.2,  "ativo": "Plataforma Petrobras (Pre-Sal, Brasil)",    "comunidade_vizinha": "Pescadores (Litoral de SP/RJ)",             "risco_secundario": "Vazamento no Mar e Destruicao de Manguezal"},
     {"lat": -6.0,  "lon": -50.1,  "ativo": "Mina Carajas Vale (Brasil)",                "comunidade_vizinha": "Comunidade Ribeirinha e Indigena",          "risco_secundario": "Rompimento de Barragem e Risco de Colera"},
     {"lat": -21.2, "lon": -47.8,  "ativo": "Usina Raízen (Sao Paulo)",                  "comunidade_vizinha": "Bairros Perifericos (Ribeirao Preto)",      "risco_secundario": "Fumaca Toxica e Incendios em Lavouras"},
     {"lat": 21.5,  "lon": -120.0, "ativo": "Navio Sonda BP (Pacifico)",                 "comunidade_vizinha": "Arquipelagos e Ilhas Costeiras",            "risco_secundario": "Tsunami com lixo quimico"},
