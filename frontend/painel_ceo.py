@@ -210,11 +210,20 @@ st.sidebar.markdown("---")
 st.sidebar.info("⚡ Dados NASA em tempo real\n\n📡 IA: Oracle Cloud (OCI)")
 
 modo_teste = st.sidebar.toggle("Modo de teste (simulação)", value=False)
-if modo_teste and visao != "Abrigos e Preparação":
+if modo_teste and visao == "Abrigos e Preparação":
+    # Cenario de demonstracao: enchente FICTICIA em Porto Alegre (RS), so na tela de Abrigos
     eventos_nasa.insert(0, {
-        "title": "Incêndio simulado",
-        "categories": [{"title": "Wildfires"}],
-        "geometry": [{"coordinates": [-87.0, 28.5]}]
+        "title": "Enchente simulada (Porto Alegre, RS)",
+        "categories": [{"title": "Floods"}],
+        "geometry": [{"coordinates": [-51.25, -30.00]}]
+    })
+elif modo_teste and visao in ("Corporativo (B2B)", "Impacto Social / ESG (Comunidade)"):
+    # Cenario de demonstracao: ciclone extratropical FICTICIO a ~410 km da Petrobras (Bacia de Campos),
+    # mesma distancia e cenario descritos no case "Bacia de Campos, Rio de Janeiro" do PDF
+    eventos_nasa.insert(0, {
+        "title": "Ciclone extratropical simulado (Oceano Atlantico)",
+        "categories": [{"title": "Severe Storms"}],
+        "geometry": [{"coordinates": [-40.78, -27.26]}]
     })
 
 
@@ -340,6 +349,8 @@ elif visao == "Abrigos e Preparação":
         st.subheader("🚨 Central de Alertas — NASA EONET ao Vivo")
         st.markdown("Cruzamento de desastres naturais em tempo real com os abrigos cadastrados.")
         
+        if modo_teste:
+            st.warning("SIMULAÇÃO: evento fictício (enchente em Porto Alegre), não é dado da NASA")
         mostrar_alerta_chuva()
         st.markdown("---")
 
