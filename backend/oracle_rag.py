@@ -28,19 +28,57 @@ def _chamar_oracle_rag_cache(_config, compartment_id, prompt_sistema):
     return response.data.chat_response.text
 
 
+import chromadb
+from chromadb.utils import embedding_functions
+
 def gerar_recomendacao_rag(evento_nome, ativo_nome, distancia, visao):
+    
+    # ==========================================
+    # RECUPERAÇÃO DO BANCO VETORIAL (O "R" DO RAG)
+    # ==========================================
+    contexto_historico = "Sem dados históricos."
+    try:
+        if "oci" in st.secrets and "COHERE_API_KEY" in st.secrets["oci"]:
+            COHERE_API_KEY = st.secrets["oci"]["COHERE_API_KEY"]
+            chroma_client = chromadb.PersistentClient(path="./banco_historico")
+            cohere_ef = embedding_functions.CohereEmbeddingFunction(
+                api_key=COHERE_API_KEY,
+                model_name="embed-multilingual-v3.0"
+            )
+            # Tenta acessar a coleção que já foi criada na ingestão
+            colecao = chroma_client.get_collection(
+                name="relatorios_defesa_civil",
+                embedding_function=cohere_ef
+            )
+            resultados = colecao.query(
+                query_texts=[evento_nome],
+                n_results=1
+            )
+            if resultados['documents'] and len(resultados['documents'][0]) > 0:
+                contexto_historico = resultados['documents'][0][0]
+    except Exception as e:
+        print(f"[RAG] Erro ao buscar no banco vetorial: {e}")
+
+    # ==========================================
+    # CONSTRUÇÃO DO PROMPT (O "A" DO RAG)
+    # ==========================================
     prompt_sistema = f"""
     Você é a IA de tomada de decisão do Omni-EcoRescue.
 
-    DADOS DO EVENTO:
+    DADOS DO EVENTO ATUAL (TEMPO REAL NASA):
     - Desastre: {evento_nome}
     - Infraestrutura em risco: {ativo_nome}
     - Distância: {distancia:.0f} KM
     - Perfil Solicitante: {visao}
 
+    HISTÓRICO DA DEFESA CIVIL (RECUPERADO VIA BANCO VETORIAL):
+    "{contexto_historico}"
+
     INSTRUÇÃO:
-    Se o perfil for "Corporativo (B2B)", retorne apenas uma recomendação de ação focada em mitigação de risco patrimonial e financeiro, em até 2 frases. Inicie com "**Decisão RAG (IA):**".
-    Se o perfil for "Impacto Social / ESG (Comunidade)", retorne apenas uma recomendação focada em evacuação humanitária e suprimentos médicos, em até 2 frases. Inicie com "**Decisão RAG (IA):**".
+    Você deve formular uma recomendação estratégica. Utilize o histórico da Defesa Civil para não repetir erros do passado.
+    Se o perfil for "Corporativo (B2B)", foque na mitigação de risco patrimonial.
+    Se o perfil for "Impacto Social / ESG", foque na evacuação e saúde pública.
+    Limite a 2 ou 3 frases curtas. Inicie com "**Decisão RAG (IA):**".
     """
 
     try:
